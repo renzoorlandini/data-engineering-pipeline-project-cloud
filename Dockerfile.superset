@@ -1,0 +1,11 @@
+# Dockerfile.superset
+FROM apache/superset:latest
+# Install Postgres driver inside Superset image
+USER root
+RUN pip install --no-cache-dir psycopg2-binary
+# Return control to the superset user
+USER superset
+# Expose Superset’s web port
+EXPOSE 8088
+# Default entrypoint (already defined by upstream image)
+CMD ["superset"]
