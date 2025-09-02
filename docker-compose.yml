@@ -6,7 +6,6 @@ services:
       dockerfile: Dockerfile.etl          # <— your ETL Dockerfile
     command: ["python", "pipeline.py"]
     environment:
-      ENV: ${ENV}                 # set to 'cloud' in your .env when using this profile
       # RDS
       RDS_HOST: ${RDS_HOST}
       RDS_PORT: ${RDS_PORT}
@@ -17,7 +16,6 @@ services:
       AWS_REGION: ${AWS_REGION}
       S3_BUCKET: ${S3_BUCKET}
       S3_PREFIX: ${S3_PREFIX}
-    profiles: ["cloud"]
 
   # --- APACHE SUPERSET (Bi Tool) ---
   superset:

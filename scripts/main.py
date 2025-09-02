@@ -1,8 +1,23 @@
-# main.py
+# main.py  — CLOUD RAW LOADER (S3 -> RDS)
+# -----------------------------------------------------------------------------
+# WHY THIS CHANGE:
+# - Default pandas.to_sql() issues 1 INSERT per row (very slow to remote RDS).
+# - We switch to batched, multi-row INSERTs:
+#       method='multi', chunksize=10000
+#   This keeps your logic identical (replace, same schema), but reduces
+#   network round-trips ~10,000x. No infra changes, no new deps.
+#
+# WHAT STAYS THE SAME:
+# - Reads CSVs from S3 using the EC2 instance role (no explicit creds).
+# - Overwrites the target table each run (idempotent raw layer).
+# - Uses your existing SQLAlchemy engine (pool_pre_ping=True).
+# -----------------------------------------------------------------------------
+
 import os
 import pandas as pd
-from etl_utils import get_engine
+from etl_utils import get_engine  # builds psycopg2 engine with pool_pre_ping
 
+# Map S3 CSV filenames to target raw tables
 FILES_TO_LOAD = {
     'olist_customers_dataset.csv': 'customers',
     'olist_geolocation_dataset.csv': 'geolocation',
@@ -22,11 +37,30 @@ def _require(name: str) -> str:
     return val
 
 def load_csv_from_s3(bucket: str, key: str, table_name: str, engine):
+    """
+    Stream a CSV from S3 and write to RDS.
+    Minimal fix: use batched multi-row INSERTs for remote Postgres.
+    """
     s3_uri = f"s3://{bucket}/{key}"
     print(f"Loading {s3_uri} → {table_name} ...")
-    # With IAM role on EC2, no explicit storage_options needed.
+
+    # With an EC2 IAM role + S3 gateway endpoint, pandas can read s3:// directly.
+    # (No storage_options needed.)
     df = pd.read_csv(s3_uri)
-    df.to_sql(table_name, engine, if_exists='replace', index=False)
+
+    # *** THE ONE-LINE FIX ***
+    # Before (slow over the network):
+    #   df.to_sql(table_name, engine, if_exists='replace', index=False)
+    # After (fast, same result/behavior):
+    df.to_sql(
+        table_name,
+        engine,
+        if_exists='replace',   # idempotent raw load
+        index=False,
+        method='multi',        # multi-row INSERT statements
+        chunksize=10000        # send 10k rows per batch (safe for RDS)
+    )
+
     print(f"Loaded {len(df)} rows into {table_name}.")
 
 def main():
@@ -36,7 +70,7 @@ def main():
     if prefix and not prefix.endswith("/"):
         prefix = prefix + "/"
 
-    engine = get_engine()
+    engine = get_engine()  # psycopg2 + pool_pre_ping (keeps long jobs stable)
 
     try:
         for filename, table in FILES_TO_LOAD.items():
