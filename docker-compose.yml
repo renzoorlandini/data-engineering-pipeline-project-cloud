@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.etl          # <— your ETL Dockerfile
-    command: ["python", "pipeline.py"]
+    command: ["scripts/python", "pipeline.py"]
     environment:
       # RDS
       RDS_HOST: ${RDS_HOST}
@@ -44,7 +44,6 @@ services:
       superset init &&
       gunicorn -w 4 --timeout 300 -b 0.0.0.0:8088 'superset.app:create_app()'
       "
-      gunicorn -w 4 --timeout 300 -b 0.0.0.0:8088 "superset.app:create_app()"
 
 volumes:
   superset_home:
